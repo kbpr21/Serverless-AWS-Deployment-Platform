@@ -1,0 +1,97 @@
+# -----------------------------------------------------------------------------
+# Sensitive Files & Security Credentials
+# -----------------------------------------------------------------------------
+# Terraform State & Local Config
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+*.tfplan
+tfplan
+.build/
+
+# AWS Credentials & Secrets
+.aws/
+credentials
+*.pem
+*.key
+*.cert
+*.pfx
+*.p12
+
+# Environment Variables & Secrets
+.env
+.env.*
+!.env.example
+
+# -----------------------------------------------------------------------------
+# Academic / Internship Report Documents & Scratch Artifacts
+# -----------------------------------------------------------------------------
+# Word Documents & Backups
+*.docx
+*.doc
+Internship Report*
+*backup*
+
+# Report Generation Dumps & Text Artifacts
+backup_paragraphs_detailed.json
+backup_text_reference.txt
+headings_dump.txt
+original_formatting_dump.txt
+temp_screenshots/
+generated_images/
+
+# Report Generation & XML Inspection Scripts
+scripts/ch*_content.py
+scripts/ch*_human.py
+scripts/tables_*.py
+scripts/dump_*.py
+scripts/inspect_*.py
+scripts/compare_*.py
+scripts/test_docx_write.py
+scripts/test_run_update.py
+scripts/find_*.py
+scripts/verify_report.py
+scripts/rewrite_*.py
+scripts/check_*.py
+scripts/generate_ch*.py
+scripts/inject_images.py
+
+# -----------------------------------------------------------------------------
+# Node.js / Frontend
+# -----------------------------------------------------------------------------
+node_modules/
+dist/
+build/
+.npm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# -----------------------------------------------------------------------------
+# Python / Virtual Environments
+# -----------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+.pytest_cache/
+
+# -----------------------------------------------------------------------------
+# Operating System & Editor Files
+# -----------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+*.tmp
+~*
+~$*

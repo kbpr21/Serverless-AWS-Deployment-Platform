@@ -1,0 +1,142 @@
+version: 0.2
+
+env:
+  variables:
+    NODE_OPTIONS: "--max-old-space-size=2048"
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 20
+    commands:
+      - 'echo "=== Phase 1: Environment and Download ==="'
+      - 'echo "Project ID: $PROJECT_ID"'
+      - 'echo "Build ID: $BUILD_ID"'
+      - 'echo "Target S3: $BUCKET_NAME"'
+      - 'echo "Base Path: /projects/${PROJECT_ID}/live/"'
+      - 'mkdir -p /tmp/workspace && cd /tmp/workspace'
+      - 'echo "Fetching source archive from S3..."'
+      - 'aws s3 cp "s3://${BUCKET_NAME}/sources/${PROJECT_ID}/${BUILD_ID}.zip" ./source.zip'
+      - 'echo "Unpacking source archive with cross-platform path normalization..."'
+      - |
+        python3 -c "
+        import zipfile, os
+        with zipfile.ZipFile('source.zip') as z:
+            for info in z.infolist():
+                norm = info.filename.replace('\\\\', '/').strip('/')
+                if not norm: continue
+                if info.filename.endswith('/') or norm.endswith('/'):
+                    os.makedirs(norm, exist_ok=True)
+                else:
+                    parent = os.path.dirname(norm)
+                    if parent: os.makedirs(parent, exist_ok=True)
+                    with open(norm, 'wb') as f:
+                        f.write(z.read(info))
+        "
+      - 'rm -f source.zip'
+      - |
+        DIR_COUNT=$(find . -maxdepth 1 -mindepth 1 -type d | wc -l)
+        FILE_COUNT=$(find . -maxdepth 1 -mindepth 1 -type f | wc -l)
+        if [ "$FILE_COUNT" -eq 0 ] && [ "$DIR_COUNT" -eq 1 ]; then
+          SINGLE_DIR=$(find . -maxdepth 1 -mindepth 1 -type d)
+          echo "Detected single nested folder: $SINGLE_DIR. Moving files to root..."
+          mv "$SINGLE_DIR"/* "$SINGLE_DIR"/.[!.]* . 2>/dev/null || true
+          rmdir "$SINGLE_DIR" 2>/dev/null || true
+        fi
+      - 'ls -la'
+
+  pre_build:
+    commands:
+      - 'echo "=== Phase 2: Dependency Resolution and Subpath Configuration ==="'
+      - |
+        if [ -f "package.json" ]; then
+          echo "Node.js project detected."
+          SUBPATH="/projects/${PROJECT_ID}/live/"
+          export PUBLIC_URL="$SUBPATH"
+          export VITE_BASE_PATH="$SUBPATH"
+          export BASE_URL="$SUBPATH"
+          echo "Installing dependencies..."
+          if [ -f "package-lock.json" ]; then
+            npm ci --prefer-offline || npm install
+          else
+            npm install
+          fi
+        else
+          echo "Static HTML/CSS/JS project detected (no package.json)."
+        fi
+
+  build:
+    commands:
+      - 'echo "=== Phase 3: Building Project ==="'
+      - |
+        if [ -f "package.json" ]; then
+          SUBPATH="/projects/${PROJECT_ID}/live/"
+          if grep -q '"build":' package.json; then
+            echo "Running npm run build with base-path injection..."
+            npm run build -- --base="$SUBPATH" || npm run build
+          else
+            echo "No build script in package.json, checking for vite/framework..."
+            npx vite build --base="$SUBPATH" || true
+          fi
+        fi
+
+  post_build:
+    commands:
+      - 'echo "=== Phase 4: Output Discovery and Deployment ==="'
+      - |
+        if [ "$CODEBUILD_BUILD_SUCCEEDING" -eq 0 ]; then
+          echo "ERROR: Build phase failed (CODEBUILD_BUILD_SUCCEEDING=0). Aborting deployment!"
+          exit 1
+        fi
+
+        OUTPUT_DIR="."
+        for candidate in dist build out public; do
+          if [ -d "$candidate" ] && [ -f "$candidate/index.html" ]; then
+            OUTPUT_DIR="$candidate"
+            break
+          fi
+        done
+        echo "Selected build output directory: $OUTPUT_DIR"
+
+        if [ ! -f "$OUTPUT_DIR/index.html" ]; then
+          echo "ERROR: index.html not found in output directory $OUTPUT_DIR!"
+          exit 1
+        fi
+
+        SUBPATH="/projects/${PROJECT_ID}/live/"
+        if ! grep -qi '<base ' "$OUTPUT_DIR/index.html"; then
+          echo "Injecting <base href=\"$SUBPATH\"> into index.html head..."
+          sed -i "s|<head>|<head><base href=\"$SUBPATH\">|i" "$OUTPUT_DIR/index.html" || true
+        fi
+
+        echo "Syncing immutable build artifacts to: s3://${BUCKET_NAME}/artifacts/${PROJECT_ID}/${BUILD_ID}/"
+        aws s3 sync "$OUTPUT_DIR" "s3://${BUCKET_NAME}/artifacts/${PROJECT_ID}/${BUILD_ID}/" \
+          --exclude "node_modules/*" \
+          --exclude ".git/*" \
+          --exclude "source.zip" \
+          --exclude ".npm/*" \
+          --cache-control "public, max-age=31536000, immutable"
+
+        echo "Promoting to live directory: s3://${BUCKET_NAME}/hosted/${PROJECT_ID}/live/"
+        aws s3 sync "$OUTPUT_DIR" "s3://${BUCKET_NAME}/hosted/${PROJECT_ID}/live/" \
+          --delete \
+          --exclude "node_modules/*" \
+          --exclude ".git/*" \
+          --exclude "source.zip" \
+          --exclude ".npm/*" \
+          --cache-control "public, max-age=0, must-revalidate"
+
+        if [ -d "$OUTPUT_DIR/assets" ]; then
+          echo "Setting immutable cache headers on hashed assets..."
+          aws s3 sync "$OUTPUT_DIR/assets" "s3://${BUCKET_NAME}/hosted/${PROJECT_ID}/live/assets" \
+            --cache-control "public, max-age=31536000, immutable"
+        fi
+
+        if [ -n "$CLOUDFRONT_DIST_ID" ]; then
+          echo "Invalidating CloudFront distribution $CLOUDFRONT_DIST_ID for /projects/${PROJECT_ID}/*"
+          aws cloudfront create-invalidation \
+            --distribution-id "$CLOUDFRONT_DIST_ID" \
+            --paths "/projects/${PROJECT_ID}/*" || echo "Warning: Invalidation request failed, continuing..."
+        fi
+
+        echo "Build and deployment completed successfully for $PROJECT_ID ($BUILD_ID)!"

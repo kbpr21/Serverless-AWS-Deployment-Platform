@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minimalist Static Showcase</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="badge">AWS Serverless Hosted</div>
+      <h1>Cloud Native Static Site</h1>
+      <p class="subtitle">Deployed automatically with AWS CodeBuild, S3 & CloudFront.</p>
+    </header>
+
+    <main class="card">
+      <h2>Project Details</h2>
+      <p>This project was deployed as a pure static HTML/CSS/JS bundle via ZIP upload.</p>
+      
+      <div class="features">
+        <div class="feature-item">
+          <strong>Instant CDN Caching</strong>
+          <span>Served through CloudFront Origin Access Control (OAC).</span>
+        </div>
+        <div class="feature-item">
+          <strong>Zero Idle Cost</strong>
+          <span>No EC2 instances or containers running when idle.</span>
+        </div>
+        <div class="feature-item">
+          <strong>Immutable Versioning</strong>
+          <span>Past versions archived and ready for instantaneous rollback.</span>
+        </div>
+      </div>
+
+      <div class="counter-box">
+        <button id="counterBtn">Click Me: <span id="count">0</span></button>
+      </div>
+    </main>
+
+    <footer>
+      <p>Built with ❤️ on Serverless AWS</p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
